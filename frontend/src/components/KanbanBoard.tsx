@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,8 +16,35 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 
 export const KanbanBoard = () => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+  const [board, setBoard] = useState<BoardData>(initialData);
+  const [loaded, setLoaded] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const isFirstRender = useRef(true);
+
+  // Load board from backend on mount
+  useEffect(() => {
+    fetch("/api/board", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => {
+        setBoard(data);
+        setLoaded(true);
+      });
+  }, []);
+
+  // Save board to backend whenever it changes (skip the first render)
+  useEffect(() => {
+    if (!loaded) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    fetch("/api/board", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(board),
+    });
+  }, [board, loaded]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -45,16 +72,16 @@ export const KanbanBoard = () => {
     }));
   };
 
-  const handleRenameColumn = (columnId: string, title: string) => {
+  const handleRenameColumn = useCallback((columnId: string, title: string) => {
     setBoard((prev) => ({
       ...prev,
       columns: prev.columns.map((column) =>
         column.id === columnId ? { ...column, title } : column
       ),
     }));
-  };
+  }, []);
 
-  const handleAddCard = (columnId: string, title: string, details: string) => {
+  const handleAddCard = useCallback((columnId: string, title: string, details: string) => {
     const id = createId("card");
     setBoard((prev) => ({
       ...prev,
@@ -68,28 +95,31 @@ export const KanbanBoard = () => {
           : column
       ),
     }));
-  };
+  }, []);
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
-    });
-  };
+  const handleDeleteCard = useCallback((columnId: string, cardId: string) => {
+    setBoard((prev) => ({
+      ...prev,
+      cards: Object.fromEntries(
+        Object.entries(prev.cards).filter(([id]) => id !== cardId)
+      ),
+      columns: prev.columns.map((column) =>
+        column.id === columnId
+          ? { ...column, cardIds: column.cardIds.filter((id) => id !== cardId) }
+          : column
+      ),
+    }));
+  }, []);
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+
+  if (!loaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-[var(--gray-text)]">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -131,6 +161,15 @@ export const KanbanBoard = () => {
               </div>
             ))}
           </div>
+          <button
+            className="absolute top-4 right-4 rounded-md bg-red-500 px-3 py-2 text-white"
+            onClick={async () => {
+              await fetch("/api/logout", { method: "POST" });
+              window.location.href = "/login";
+            }}
+          >
+            Logout
+          </button>
         </header>
 
         <DndContext

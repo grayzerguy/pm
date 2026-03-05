@@ -1,9 +1,29 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+from typing import Optional
 import pathlib
+from app.database import init_db, get_board, save_board
 
-app = FastAPI()
+# --- simple auth config ----------------------------------------------------------------
+VALID_USER = "user"
+VALID_PASS = "password"
+COOKIE_NAME = "session"
+COOKIE_VALUE = "1"
+
+
+def require_auth(request: Request):
+    # raise 401 if no valid cookie
+    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
+        raise HTTPException(status_code=401)
+
+@asynccontextmanager
+async def lifespan(app):
+    init_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # determine where static files live; the Docker build copies the frontend export to
 # `/app/static`, but when running tests locally we may build in `frontend/out` and
@@ -14,14 +34,16 @@ _project_root = pathlib.Path(__file__).parent.parent
 _static_dir = _project_root / "static"
 _frontend_out = _project_root.parent / "frontend" / "out"
 
-# prefer the explicit static directory if it exists, otherwise fall back to the
-# exported frontend output (used during development when tests build the site).
-if _static_dir.is_dir():
-    serve_dir = _static_dir
-elif _frontend_out.is_dir():
-    serve_dir = _frontend_out
-else:
-    serve_dir = None
+
+def _get_serve_dir() -> Optional[pathlib.Path]:
+    if _static_dir.is_dir():
+        return _static_dir
+    if _frontend_out.is_dir():
+        return _frontend_out
+    return None
+
+
+serve_dir = _get_serve_dir()
 
 if serve_dir:
     # mount at `/static` so that assets (js/css) can be fetched.  The root
@@ -29,15 +51,64 @@ if serve_dir:
     app.mount("/static", StaticFiles(directory=str(serve_dir)), name="static")
 
 @app.get("/", response_class=HTMLResponse)
-def read_root():
-    if serve_dir:
-        index = serve_dir / "index.html"
+def read_root(request: Request):
+    # redirect unauthenticated users to login page
+    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
+        return RedirectResponse(url="/login")
+
+    sd = _get_serve_dir()
+    if sd:
+        index = sd / "index.html"
         if index.exists():
             return FileResponse(str(index))
     return "<html><body><h1>Hello, world!</h1></body></html>"
 
 # catch‑all to support client‑side routing (for example when using Next's exported
 # files there may be multiple html pages, but we at least want `/` to work).
+@app.post("/api/login")
+async def login(request: Request):
+    # parse body manually rather than rely on models to keep dependencies light
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    username = payload.get("username")
+    password = payload.get("password")
+    if username == VALID_USER and password == VALID_PASS:
+        response = {"success": True}
+        # set cookie in response? Wait, for JSON, can't set cookie.
+        # Need to use response object.
+        from fastapi.responses import JSONResponse
+        resp = JSONResponse(content=response)
+        resp.set_cookie(COOKIE_NAME, COOKIE_VALUE, httponly=True)
+        return resp
+    raise HTTPException(status_code=401, detail="invalid credentials")
+
+
+@app.post("/api/logout")
+def logout():
+    from fastapi.responses import JSONResponse
+    resp = JSONResponse(content={"success": True})
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
+
+
+@app.get("/api/board")
+def api_get_board(request: Request):
+    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
+        raise HTTPException(status_code=401)
+    return get_board(VALID_USER)
+
+
+@app.put("/api/board")
+async def api_save_board(request: Request):
+    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
+        raise HTTPException(status_code=401)
+    data = await request.json()
+    save_board(VALID_USER, data)
+    return {"success": True}
+
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
@@ -48,12 +119,30 @@ def health_check():
 # explicitly ignore the `/api` prefix here, otherwise all requests under `/api`
 # will be swallowed by the wildcard.
 @app.get("/{full_path:path}", response_class=HTMLResponse)
-def catch_all(full_path: str):
+def catch_all(full_path: str, request: Request):
     # don't intercept API requests
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404)
-    if serve_dir:
-        index = serve_dir / "index.html"
+    # if the user is not logged in and is not heading to login page, redirect
+    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE and not full_path.startswith("login"):
+        return RedirectResponse(url="/login")
+    sd = _get_serve_dir()
+    if sd:
+        # try serving a file/directory that matches the requested path
+        candidate = sd / full_path
+        # check for directory with index.html
+        if candidate.is_dir():
+            index = candidate / "index.html"
+            if index.exists():
+                return FileResponse(str(index))
+        # check for exact file (including .html extension)
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        html_file = sd / f"{full_path}.html"
+        if html_file.is_file():
+            return FileResponse(str(html_file))
+        # fall back to root index for client-side routes
+        index = sd / "index.html"
         if index.exists():
             return FileResponse(str(index))
     raise HTTPException(status_code=404)

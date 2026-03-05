@@ -1,3 +1,4 @@
+"use client";
 import type { Card } from "@/lib/kanban";
 
 type KanbanCardPreviewProps = {

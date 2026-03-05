@@ -10,7 +10,7 @@ RUN npm ci --silent
 
 # copy entire frontend and build/export statically
 COPY frontend/ .
-RUN npm run build
+RUN BUILD_EXPORT=1 npm run build
 
 # second stage: python runtime with backend
 FROM python:3.11-slim as base
