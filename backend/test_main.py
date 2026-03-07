@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import pathlib
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from app.main import app
@@ -127,3 +128,64 @@ def test_board_save_and_reload():
     # restore original title
     reloaded["columns"][0]["title"] = "Backlog"
     client.put("/api/board", json=reloaded)
+
+
+def test_ai_test_requires_auth():
+    client.cookies.clear()
+    resp = client.get("/api/ai/test")
+    assert resp.status_code == 401
+
+
+def test_ai_test_returns_answer():
+    client.cookies.clear()
+    client.post("/api/login", json={"username": "user", "password": "password"})
+    with patch("app.main.call_ai", return_value="4"):
+        resp = client.get("/api/ai/test")
+    assert resp.status_code == 200
+    assert resp.json()["answer"] == "4"
+
+
+def test_chat_requires_auth():
+    client.cookies.clear()
+    resp = client.post("/api/chat", json={"messages": [], "board": {}})
+    assert resp.status_code == 401
+
+
+def test_chat_reply_no_board_update():
+    client.cookies.clear()
+    client.post("/api/login", json={"username": "user", "password": "password"})
+    board = client.get("/api/board").json()
+    ai_response = '{"reply": "Hello!", "board_update": null}'
+    with patch("app.main.call_ai", return_value=ai_response):
+        resp = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "Hi"}], "board": board},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["reply"] == "Hello!"
+    assert data["board_update"] is None
+
+
+def test_chat_with_board_update():
+    client.cookies.clear()
+    client.post("/api/login", json={"username": "user", "password": "password"})
+    board = client.get("/api/board").json()
+    updated_board = dict(board)
+    updated_board["columns"][0]["title"] = "AI Updated"
+    ai_response = f'{{"reply": "Updated!", "board_update": {__import__("json").dumps(updated_board)}}}'
+    with patch("app.main.call_ai", return_value=ai_response):
+        resp = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "Rename Backlog to AI Updated"}], "board": board},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["reply"] == "Updated!"
+    assert data["board_update"]["columns"][0]["title"] == "AI Updated"
+    # verify the board was persisted
+    saved = client.get("/api/board").json()
+    assert saved["columns"][0]["title"] == "AI Updated"
+    # restore
+    saved["columns"][0]["title"] = "Backlog"
+    client.put("/api/board", json=saved)

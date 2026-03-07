@@ -2,9 +2,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+import json
 import pathlib
 from app.database import init_db, get_board, save_board
+from app.ai import call_ai
 
 # --- simple auth config ----------------------------------------------------------------
 VALID_USER = "user"
@@ -112,6 +115,84 @@ async def api_save_board(request: Request):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/ai/test")
+def ai_test(request: Request):
+    require_auth(request)
+    try:
+        answer = call_ai([{"role": "user", "content": "What is 2+2? Reply with just the number."}])
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    board: Dict[str, Any]
+
+
+SYSTEM_PROMPT = """You are an AI assistant helping manage a Kanban project board.
+
+The current board state is provided below as JSON. When the user asks you to create, move, or edit cards, update the board and return the full new board state.
+
+Board structure:
+- columns: list of {{id, title, cardIds}}
+- cards: dict mapping card_id -> {{id, title, details}}
+- Default column IDs: col-backlog, col-discovery, col-progress, col-review, col-done
+- For new cards generate a unique id like "card-" followed by a short random string
+
+Always respond with a JSON object and nothing else (no markdown fences):
+{{
+  "reply": "friendly message describing what you did or answering the question",
+  "board_update": null
+}}
+
+OR if the board changed:
+{{
+  "reply": "friendly message describing the changes",
+  "board_update": {{...complete updated board...}}
+}}
+
+Current board:
+{board_json}"""
+
+
+@app.post("/api/chat")
+async def api_chat(request: Request, body: ChatRequest):
+    require_auth(request)
+    system = SYSTEM_PROMPT.format(board_json=json.dumps(body.board, ensure_ascii=False))
+    messages = [{"role": "system", "content": system}]
+    messages += [{"role": m.role, "content": m.content} for m in body.messages]
+    try:
+        raw = call_ai(messages)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # parse structured response
+    try:
+        # strip possible markdown fences the model may add despite instructions
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        result = json.loads(text)
+    except Exception:
+        # fallback: treat raw text as a plain reply with no board update
+        result = {"reply": raw, "board_update": None}
+
+    board_update = result.get("board_update")
+    if board_update:
+        save_board(VALID_USER, board_update)
+
+    return {"reply": result.get("reply", ""), "board_update": board_update}
+
 
 # catch‑all to support client‑side routing (for example when using Next's exported
 # files there may be multiple html pages, but we at least want `/` to work)

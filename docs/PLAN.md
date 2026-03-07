@@ -46,6 +46,23 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 
 # PLAN.md
 
+## סטטוס נוכחי
+
+| חלק | נושא | סטטוס |
+|-----|------|-------|
+| 1 | תכנון | הושלם |
+| 2 | Docker + Backend בסיסי | הושלם |
+| 3 | Frontend סטטי | הושלם |
+| 4 | התחברות | הושלם |
+| 5 | מודל DB | הושלם |
+| 6 | Backend API | הושלם |
+| 7 | Frontend + Backend | הושלם |
+| 8 | חיבור AI | הושלם |
+| 9 | Structured Outputs | הושלם |
+| 10 | ממשק צ'אט | טרם החל |
+
+---
+
 ## מטרת המסמך
 
 מסמך זה מגדיר תכנית עבודה מדורגת וברורה לבניית MVP של אפליקציית ניהול פרויקטים (Kanban + AI), בהתאם לדרישות המערכת ולהחלטות הטכנולוגיות.
@@ -115,6 +132,14 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 
 המערכת רצה מקומית בתוך Docker ומחזירה גם דף HTML וגם תגובת API תקינה.
 
+## החלטות מימוש
+
+- Dockerfile משתמש ב-`uv` כמנהל חבילות Python
+- Backend: FastAPI + Uvicorn, קובץ `.env` נקרא עם `python-dotenv`
+- `GET /api/health` מחזיר `{"status": "ok"}`
+- סקריפטים: `scripts/start.sh`, `scripts/stop.sh`, `scripts/start.bat`, `scripts/stop.bat`
+- קונטיינר חושף פורט 8000
+
 ---
 
 # חלק 3: שילוב Frontend סטטי
@@ -134,6 +159,14 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 ## קריטריון הצלחה
 
 לוח הקנבן מוצג ב־/ מתוך Docker ופועל כפי שפעל בדמו המקורי.
+
+## החלטות מימוש
+
+- Next.js עם `output: 'export'` — build סטטי בלבד (ללא SSR)
+- `BUILD_EXPORT=1 npm run build` מייצר תיקיית `out/`
+- FastAPI מגיש קבצים סטטיים ומטפל ב-catch-all לתמיכה בניתוב client-side
+- dev mode: `npm run dev` על פורט 3000 עם proxy ל-8000
+- הקבצים הסטטיים של פרודקשן נשמרים בתיקיית `static/` בשורש
 
 ---
 
@@ -155,6 +188,14 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 
 חוויית התחברות מלאה ופשוטה עובדת מקצה לקצה.
 
+## החלטות מימוש
+
+- cookie בשם `session` עם ערך `1`, עם דגל `httponly`
+- credentials קשיחים ב-`main.py`: `VALID_USER="user"`, `VALID_PASS="password"`
+- frontend: `POST /api/login` עם `credentials: "include"`, redirect ל-`/login` בקוד 401
+- backend: redirect מ-`/` ל-`/login` לגישה ללא cookie; `POST /api/logout` מוחק את ה-cookie
+- אין middleware (לא תואם `output: export`) — הגנה מתבצעת ב-`useEffect` בצד client
+
 ---
 
 # חלק 5: מודל בסיס נתונים
@@ -174,6 +215,14 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 ## קריטריון הצלחה
 
 אישור מפורש של המשתמש על המודל המוצע.
+
+## החלטות מימוש
+
+- טבלה אחת בלבד: `boards` עם עמודות `user_id` (TEXT) ו-`data` (TEXT/JSON)
+- אין טבלת users ל-MVP — `user_id` הוא מחרוזת קשיחה `"user"`
+- כל תוכן הלוח נשמר כ-JSON blob אחד — פשוט ומספיק ל-MVP
+- DB נוצר אוטומטית ב-`backend/kanban.db` עם `CREATE TABLE IF NOT EXISTS`
+- מתועד ב-`docs/database.md`
 
 ---
 
@@ -195,6 +244,15 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 
 API יציב, מתועד ונבדק היטב.
 
+## החלטות מימוש
+
+- `backend/app/database.py`: `init_db()`, `get_board(user_id)`, `save_board(user_id, data)`
+- `init_db()` נקרא אוטומטית ב-`lifespan` וגם בעת import
+- `GET /api/board` — מחזיר JSON של הלוח, דורש auth
+- `PUT /api/board` — מקבל JSON מלא של הלוח ומחליף את הקיים, דורש auth
+- אין CRUD granular — כל שינוי מחליף את כל ה-blob
+- 7 בדיקות backend עוברות
+
 ---
 
 # חלק 7: חיבור מלא בין Frontend ל-Backend
@@ -214,6 +272,15 @@ API יציב, מתועד ונבדק היטב.
 ## קריטריון הצלחה
 
 לוח קנבן persistent אמיתי שעובד מקצה לקצה.
+
+## החלטות מימוש
+
+- `KanbanBoard.tsx`: טוען מ-`GET /api/board` ב-`useEffect` בטעינה ראשונה
+- שמירה אוטומטית ב-`useEffect` על כל שינוי ב-`board` state (עם `useRef` למניעת שמירה ראשונה)
+- `credentials: "include"` בכל קריאות ה-fetch
+- dev mode: `next.config.ts` מגדיר rewrites proxy מ-`/api/*` ל-`http://localhost:8000`
+- production/Docker: frontend נבנה סטטית עם `BUILD_EXPORT=1` ומוגש ישירות מ-FastAPI
+- 9 בדיקות backend עוברות
 
 ---
 
@@ -235,6 +302,15 @@ API יציב, מתועד ונבדק היטב.
 
 קריאת AI עובדת בצורה יציבה ומחזירה תשובה תקינה.
 
+## החלטות מימוש
+
+- `backend/app/ai.py`: פונקציה `call_ai(messages)` ופונקציה פנימית `_call(url, api_key, model, messages)`
+- מנסה OpenRouter ראשון (מודל `openai/gpt-oss-120b`, מפתח `OPEN_ROUTE_API_KEY`)
+- fallback אוטומטי ל-OpenAI (מודל `gpt-4o-mini`, מפתח `OPENAI_API_KEY`) בשגיאות 401/402/403
+- `GET /api/ai/test` — endpoint לבדיקה שמחזיר `{"answer": "4"}` לשאלת 2+2
+- בדיקות עם `unittest.mock.patch` — לא דורשות API key אמיתי
+- 9 בדיקות backend עוברות
+
 ---
 
 # חלק 9: Structured Outputs ועדכון Kanban
@@ -254,6 +330,16 @@ API יציב, מתועד ונבדק היטב.
 ## קריטריון הצלחה
 
 ה-AI מסוגל להשיב למשתמש ולעדכן את הלוח בצורה מבוקרת ויציבה.
+
+## החלטות מימוש
+
+- `POST /api/chat` מקבל `{ messages: [...], board: {...} }` — הלוח נשלח מה-frontend
+- system prompt מסביר את מבנה הלוח ומבקש תגובת JSON בפורמט `{"reply": "...", "board_update": null | {...}}`
+- `ChatRequest` ו-`ChatMessage` מוגדרים כ-Pydantic models
+- הלוח הנוכחי מוטמע בתוך ה-system prompt עצמו
+- אם `board_update` קיים — נשמר מיד ב-DB דרך `save_board`
+- parsing סלחני: אם ה-AI החזיר markdown fences נגרד אותן; אם ה-JSON לא תקין — מחזירים את הטקסט כ-reply ו-null כ-board_update
+- 3 בדיקות חדשות; סך הכל 12 בדיקות backend עוברות
 
 ---
 
