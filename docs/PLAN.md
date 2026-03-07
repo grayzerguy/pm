@@ -59,7 +59,7 @@ Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, a
 | 7 | Frontend + Backend | הושלם |
 | 8 | חיבור AI | הושלם |
 | 9 | Structured Outputs | הושלם |
-| 10 | ממשק צ'אט | טרם החל |
+| 10 | ממשק צ'אט | הושלם |
 
 ---
 
@@ -360,6 +360,18 @@ API יציב, מתועד ונבדק היטב.
 ## קריטריון הצלחה
 
 צ'אט AI מלא, יציב ומשולב בלוח הקנבן.
+
+## החלטות מימוש
+
+- `AIChatSidebar.tsx`: קומפוננטה עם sidebar קבוע בצד ימין (340px)
+- board state הועלה ל-`page.tsx` — מועבר כ-props גם ל-`KanbanBoard` וגם ל-`AIChatSidebar`
+- `KanbanBoard.tsx`: מקבל `board` ו-`setBoard` כ-props; הסרנו fetch פנימי של טעינה; שמירה על שינויים נשארת בקומפוננטה
+- היסטוריית שיחה מנוהלת ב-state מקומי של `AIChatSidebar`
+- אם `board_update` מוחזר מה-API — `setBoard` נקרא ישירות ומרענן את הלוח אוטומטית
+- Enter שולח הודעה (Shift+Enter = שורה חדשה)
+- אינדיקטור טעינה (3 נקודות מקפצות) בזמן המתנה לתגובה
+- `KanbanBoard.test.tsx` עודכן עם `Wrapper` component שמספק state אמיתי
+- 6 בדיקות frontend עוברות
 
 ---
 

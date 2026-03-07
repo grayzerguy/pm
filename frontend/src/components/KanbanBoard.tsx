@@ -13,27 +13,19 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, moveCard, type BoardData } from "@/lib/kanban";
 
-export const KanbanBoard = () => {
-  const [board, setBoard] = useState<BoardData>(initialData);
-  const [loaded, setLoaded] = useState(false);
+type Props = {
+  board: BoardData;
+  setBoard: React.Dispatch<React.SetStateAction<BoardData>>;
+};
+
+export const KanbanBoard = ({ board, setBoard }: Props) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const isFirstRender = useRef(true);
 
-  // Load board from backend on mount
-  useEffect(() => {
-    fetch("/api/board", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        setBoard(data);
-        setLoaded(true);
-      });
-  }, []);
-
   // Save board to backend whenever it changes (skip the first render)
   useEffect(() => {
-    if (!loaded) return;
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
@@ -44,7 +36,7 @@ export const KanbanBoard = () => {
       credentials: "include",
       body: JSON.stringify(board),
     });
-  }, [board, loaded]);
+  }, [board]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -112,14 +104,6 @@ export const KanbanBoard = () => {
   }, []);
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
-
-  if (!loaded) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-[var(--gray-text)]">Loading...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="relative overflow-hidden">
