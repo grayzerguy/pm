@@ -204,6 +204,14 @@ def catch_all(full_path: str, request: Request):
     # don't intercept API requests
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404)
+    # always serve static assets without auth check
+    if full_path.startswith("_next/") or full_path.startswith("static/"):
+        sd = _get_serve_dir()
+        if sd:
+            candidate = sd / full_path
+            if candidate.is_file():
+                return FileResponse(str(candidate))
+        raise HTTPException(status_code=404)
     # if the user is not logged in and is not heading to login page, redirect
     if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE and not full_path.startswith("login"):
         return RedirectResponse(url="/login")
