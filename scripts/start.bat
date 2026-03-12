@@ -9,6 +9,9 @@ if %ERRORLEVEL%==0 (
     docker rm -f %CONTAINER_NAME% >nul 2>&1
 )
 
-docker run -d --name %CONTAINER_NAME% -p 8000:8000 %IMAGE_NAME%
+set ENV_ARG=
+if exist "%~dp0..\env" set ENV_ARG=--env-file "%~dp0..\.env"
+
+docker run -d --name %CONTAINER_NAME% -p 8000:8000 %ENV_ARG% %IMAGE_NAME%
 
 echo Container started at http://localhost:8000
