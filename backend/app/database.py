@@ -66,5 +66,3 @@ def save_board(user_id: str, data: dict) -> None:
         conn.commit()
 
 
-# initialise on import so the table always exists
-init_db()

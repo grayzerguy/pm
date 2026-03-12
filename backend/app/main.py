@@ -78,11 +78,7 @@ async def login(request: Request):
     username = payload.get("username")
     password = payload.get("password")
     if username == VALID_USER and password == VALID_PASS:
-        response = {"success": True}
-        # set cookie in response? Wait, for JSON, can't set cookie.
-        # Need to use response object.
-        from fastapi.responses import JSONResponse
-        resp = JSONResponse(content=response)
+        resp = JSONResponse(content={"success": True})
         resp.set_cookie(COOKIE_NAME, COOKIE_VALUE, httponly=True)
         return resp
     raise HTTPException(status_code=401, detail="invalid credentials")
@@ -90,7 +86,6 @@ async def login(request: Request):
 
 @app.post("/api/logout")
 def logout():
-    from fastapi.responses import JSONResponse
     resp = JSONResponse(content={"success": True})
     resp.delete_cookie(COOKIE_NAME)
     return resp
@@ -98,15 +93,13 @@ def logout():
 
 @app.get("/api/board")
 def api_get_board(request: Request):
-    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
-        raise HTTPException(status_code=401)
+    require_auth(request)
     return get_board(VALID_USER)
 
 
 @app.put("/api/board")
 async def api_save_board(request: Request):
-    if request.cookies.get(COOKIE_NAME) != COOKIE_VALUE:
-        raise HTTPException(status_code=401)
+    require_auth(request)
     data = await request.json()
     save_board(VALID_USER, data)
     return {"success": True}
@@ -142,31 +135,31 @@ SYSTEM_PROMPT = """You are an AI assistant helping manage a Kanban project board
 The current board state is provided below as JSON. When the user asks you to create, move, or edit cards, update the board and return the full new board state.
 
 Board structure:
-- columns: list of {{id, title, cardIds}}
-- cards: dict mapping card_id -> {{id, title, details}}
+- columns: list of {id, title, cardIds}
+- cards: dict mapping card_id -> {id, title, details}
 - Default column IDs: col-backlog, col-discovery, col-progress, col-review, col-done
 - For new cards generate a unique id like "card-" followed by a short random string
 
 Always respond with a JSON object and nothing else (no markdown fences):
-{{
+{
   "reply": "friendly message describing what you did or answering the question",
   "board_update": null
-}}
+}
 
 OR if the board changed:
-{{
+{
   "reply": "friendly message describing the changes",
-  "board_update": {{...complete updated board...}}
-}}
+  "board_update": {...complete updated board...}
+}
 
 Current board:
-{board_json}"""
+BOARD_JSON_PLACEHOLDER"""
 
 
 @app.post("/api/chat")
 async def api_chat(request: Request, body: ChatRequest):
     require_auth(request)
-    system = SYSTEM_PROMPT.format(board_json=json.dumps(body.board, ensure_ascii=False))
+    system = SYSTEM_PROMPT.replace("BOARD_JSON_PLACEHOLDER", json.dumps(body.board, ensure_ascii=False))
     messages = [{"role": "system", "content": system}]
     messages += [{"role": m.role, "content": m.content} for m in body.messages]
     try:

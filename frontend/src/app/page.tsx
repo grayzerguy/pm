@@ -10,6 +10,7 @@ export default function Home() {
   const router = useRouter();
   const [board, setBoard] = useState<BoardData>(initialData);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/board", { credentials: "include" })
@@ -25,8 +26,17 @@ export default function Home() {
           setBoard(data);
           setLoaded(true);
         }
-      });
+      })
+      .catch(() => setError(true));
   }, [router]);
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-red-600">Failed to load board. Please refresh.</p>
+      </div>
+    );
+  }
 
   if (!loaded) {
     return (

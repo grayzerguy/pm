@@ -10,7 +10,7 @@ type Message = {
 
 type Props = {
   board: BoardData;
-  setBoard: (board: BoardData) => void;
+  setBoard: React.Dispatch<React.SetStateAction<BoardData>>;
 };
 
 export const AIChatSidebar = ({ board, setBoard }: Props) => {

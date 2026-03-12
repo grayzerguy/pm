@@ -24,18 +24,22 @@ export const KanbanBoard = ({ board, setBoard }: Props) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const isFirstRender = useRef(true);
 
-  // Save board to backend whenever it changes (skip the first render)
+  // Save board to backend whenever it changes (skip the first render).
+  // Debounced 400ms so rapid changes (e.g. column rename keystrokes) are batched.
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    fetch("/api/board", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(board),
-    });
+    const timer = setTimeout(() => {
+      fetch("/api/board", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(board),
+      }).catch(console.error);
+    }, 400);
+    return () => clearTimeout(timer);
   }, [board]);
 
   const sensors = useSensors(
@@ -46,11 +50,11 @@ export const KanbanBoard = ({ board, setBoard }: Props) => {
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
-  };
+  }, []);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
 
@@ -62,7 +66,7 @@ export const KanbanBoard = ({ board, setBoard }: Props) => {
       ...prev,
       columns: moveCard(prev.columns, active.id as string, over.id as string),
     }));
-  };
+  }, []);
 
   const handleRenameColumn = useCallback((columnId: string, title: string) => {
     setBoard((prev) => ({
@@ -146,7 +150,7 @@ export const KanbanBoard = ({ board, setBoard }: Props) => {
             ))}
           </div>
           <button
-            className="absolute top-4 right-4 rounded-md bg-red-500 px-3 py-2 text-white"
+            className="absolute top-4 right-4 rounded-md bg-[var(--secondary-purple)] px-3 py-2 text-white"
             onClick={async () => {
               await fetch("/api/logout", { method: "POST" });
               window.location.href = "/login";

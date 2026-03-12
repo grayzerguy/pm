@@ -1,3 +1,5 @@
+import json
+import os
 import shutil
 import subprocess
 import pathlib
@@ -12,6 +14,10 @@ from app.main import app
 # separate manual build step.
 
 def _build_frontend_if_needed():
+    # Set SKIP_FRONTEND_BUILD=1 to skip the npm build when static files are already current.
+    if os.environ.get("SKIP_FRONTEND_BUILD"):
+        return
+
     workspace = pathlib.Path(__file__).parents[1]
     frontend = workspace / "frontend"
     out = frontend / "out"
@@ -22,16 +28,10 @@ def _build_frontend_if_needed():
     if static.is_dir():
         shutil.rmtree(static)
 
-    # otherwise, build the frontend export
-    # rebuild output unconditionally so new routes/pages show up
     if out.is_dir():
         shutil.rmtree(out)
-    # run npm commands; these may raise if npm/node isn't available but
-    # that's fine for a developer environment where the frontend is used.
     subprocess.run(["npm", "ci"], cwd=str(frontend), check=True)
-    subprocess.run(["npm", "run", "build"], cwd=str(frontend), check=True, env={**__import__("os").environ, "BUILD_EXPORT": "1"})
-    # next export is not needed since we build with `output: 'export'` in
-    # next.config.ts; `next build` already produces the out/ directory.
+    subprocess.run(["npm", "run", "build"], cwd=str(frontend), check=True, env={**os.environ, "BUILD_EXPORT": "1"})
 
     # copy the export into backend/static so that the server code can find it
     if static.exists():
@@ -173,7 +173,7 @@ def test_chat_with_board_update():
     board = client.get("/api/board").json()
     updated_board = dict(board)
     updated_board["columns"][0]["title"] = "AI Updated"
-    ai_response = f'{{"reply": "Updated!", "board_update": {__import__("json").dumps(updated_board)}}}'
+    ai_response = f'{{"reply": "Updated!", "board_update": {json.dumps(updated_board)}}}'
     with patch("app.main.call_ai", return_value=ai_response):
         resp = client.post(
             "/api/chat",

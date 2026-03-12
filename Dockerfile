@@ -16,9 +16,9 @@ RUN BUILD_EXPORT=1 npm run build
 FROM python:3.11-slim as base
 WORKDIR /app
 
-# install dependencies
+# install dependencies using uv
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install uv --quiet && uv pip install --system --no-cache -r requirements.txt
 
 # copy backend application
 COPY backend/app ./app

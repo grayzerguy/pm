@@ -24,6 +24,8 @@ def call_ai(messages: list) -> str:
             if e.response.status_code not in (401, 402, 403):
                 raise
             # fall through to OpenAI
+        except httpx.TransportError:
+            pass  # network-level failure; fall through to OpenAI
 
     if OPENAI_API_KEY:
         return _call(
