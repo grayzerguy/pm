@@ -150,7 +150,7 @@ export const KanbanBoard = ({ board, setBoard }: Props) => {
             ))}
           </div>
           <button
-            className="absolute top-4 right-4 rounded-md bg-[var(--secondary-purple)] px-3 py-2 text-white"
+            className="absolute top-4 end-4 rounded-md bg-[var(--secondary-purple)] px-3 py-2 text-white"
             onClick={async () => {
               await fetch("/api/logout", { method: "POST" });
               window.location.href = "/login";

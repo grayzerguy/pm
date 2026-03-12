@@ -67,7 +67,7 @@ export const AIChatSidebar = ({ board, setBoard }: Props) => {
   return (
     <aside
       style={{ width: 340, minWidth: 300, maxWidth: 400 }}
-      className="flex flex-col border-l border-[var(--stroke)] bg-white/90 backdrop-blur h-screen sticky top-0"
+      className="flex flex-col border-s border-[var(--stroke)] bg-white/90 backdrop-blur h-screen sticky top-0"
     >
       {/* Header */}
       <div className="px-5 py-4 border-b border-[var(--stroke)] bg-[var(--navy-dark)]">
@@ -94,8 +94,8 @@ export const AIChatSidebar = ({ board, setBoard }: Props) => {
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
                 msg.role === "user"
-                  ? "bg-[var(--primary-blue)] text-white rounded-br-sm"
-                  : "bg-[var(--surface)] border border-[var(--stroke)] text-[var(--navy-dark)] rounded-bl-sm"
+                  ? "bg-[var(--primary-blue)] text-white rounded-ee-sm"
+                  : "bg-[var(--surface)] border border-[var(--stroke)] text-[var(--navy-dark)] rounded-es-sm"
               }`}
             >
               {msg.content}
